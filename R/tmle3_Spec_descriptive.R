@@ -13,7 +13,7 @@ tmle3_Spec_descriptive <- R6Class(
   inherit = tmle3_Spec,
   public = list(
     initialize = function(...) {
-      super$initialize(baseline_level=baseline_level, ...)
+      super$initialize(...)
     },
     make_tmle_task = function(data, node_list, ...) {
       # make tmle_task
