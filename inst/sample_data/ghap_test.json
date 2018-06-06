@@ -1,0 +1,36 @@
+{
+  "roles": [
+    "strata",
+    "id",
+    "W",
+    "A",
+    "Y"
+  ],
+   "data":{
+      "uri": "https://git.ghap.io/stash/scm/hbgd-teams/UCB-SuperLearner.git",
+      "repository_path":"tlapp-demo/risk_factor_test_data.csv"
+   },
+  "nodes": {
+    "strata": [
+      "STUDYID"
+    ],
+    "W": {},
+    "A": [
+      "HHwealth_quart"
+    ],
+    "Y": [
+      "wast_inc"
+    ]
+  },
+  "script_params": {
+    "parallelize": [
+      false
+    ],
+    "baseline_level": [
+      null
+    ]
+  },
+  "output_directory": [
+    ""
+  ]
+}

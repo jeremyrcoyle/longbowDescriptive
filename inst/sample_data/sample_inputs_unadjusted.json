@@ -1,0 +1,40 @@
+{
+  "roles": [
+    "strata",
+    "id",
+    "W",
+    "A",
+    "Y"
+  ],
+  "data": {
+    "type": [
+      "web"
+    ],
+    "uri": [
+      "https://raw.githubusercontent.com/HBGD-UCB/longbowRiskFactors/master/inst/sample_data/birthwt_data.csv"
+    ]
+  },
+  "nodes": {
+    "strata": [
+      "study_id"
+    ],
+    "W": {},
+    "A": [
+      "parity_cat"
+    ],
+    "Y": [
+      "haz01"
+    ]
+  },
+  "script_params": {
+    "parallelize": [
+      false
+    ],
+    "baseline_level": [
+      null
+    ]
+  },
+  "output_directory": [
+    ""
+  ]
+}

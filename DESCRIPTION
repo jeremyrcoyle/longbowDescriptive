@@ -1,0 +1,26 @@
+Package: longbowDescriptive
+Version: 0.0.0.9000
+Title: Longbow Template for Descriptive Statistics
+Description: Longbow template (with helper functions) for simple descriptive statistics using TMLE (ie normal approximation)
+Authors@R: person("Jeremy", "Coyle", email = "jeremyrcoyle@gmail.com", role = c("aut", "cre"))
+License: GPL-3
+Encoding: UTF-8
+LazyData: true
+ByteCompile: true
+Imports:
+	 R6,
+	 data.table,
+	 ggplot2,
+	 stringr,
+     sl3,
+     tmle3,
+     longbowtools
+Remotes:
+    github::osofr/condensier,
+    github::tlverse/delayed,
+    github::tlverse/sl3@variable-type-factor,
+    github::tlverse/tmle3,
+    github::tlverse/longbowtools,
+Suggests: 
+    testthat
+RoxygenNote: 6.0.1

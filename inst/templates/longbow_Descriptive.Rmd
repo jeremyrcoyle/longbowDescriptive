@@ -1,0 +1,235 @@
+---
+title: "Descriptive Analysis"
+output: 
+  html_document:
+    keep_md: TRUE
+    self_contained: true
+required_packages:  ['github://HBGD-UCB/longbowRiskFactors','github://jeremyrcoyle/skimr@vector_types', 'github://tlverse/delayed']
+params:
+  roles:
+    value:
+      - exclude
+      - strata
+      - id
+      - W
+      - Y
+  data: 
+    value: 
+      type: 'web'
+      uri: 'https://raw.githubusercontent.com/HBGD-UCB/longbowRiskFactors/master/inst/sample_data/birthwt_data.rdata'
+  nodes:
+    value:
+      strata: ['study_id', 'mrace']
+      id: ['subjid']
+      W: []
+      Y: ['haz01']
+  script_params:
+    value:
+      parallelize:
+        input: checkbox
+        value: FALSE
+      baseline_level:
+        input: 'character'
+        value: "[1,2)"
+  output_directory:
+    value: ''
+
+---
+
+```{r setup, include=FALSE}
+library(knitr)
+knitr::opts_chunk$set(echo = FALSE, message=FALSE, eval.after = 'fig.cap')
+options(scipen=999)
+```
+
+```{r params, warning=FALSE, message=FALSE}
+library(longbowtools)
+library(longbowDescriptive)
+library(sl3)
+library(tmle3)
+library(data.table)
+library(stringr)
+data <- get_tl_data()
+nodes <- get_tl_nodes()
+library(future)
+tl_params <- get_tl_params()
+
+message(nodes)
+message(tl_params)
+if(tl_params$parallelize){
+  
+  workers=availableCores()/2
+  plan(multicore, workers=workers)
+} else {
+  workers = 1
+  plan(sequential)
+}
+
+if(length(nodes$W)==0){
+  nodes$W=NULL
+}
+```
+
+```{r preprocessing}
+
+# drop strata variables not present in data
+nodes$strata <- intersect(nodes$strata, names(data))
+
+# drop missing values
+processed <- process_missing(data, nodes,complete_nodes = c("Y"))
+data <- processed$data
+nodes <- processed$node_list
+
+
+# convert character columns to factors
+char_to_factor <-function(data){
+  classes <- sapply(data,data.class)
+  char_cols <- names(classes)[which(classes=="character")]
+  set(data, , char_cols, data[,lapply(.SD, as.factor), .SDcols = char_cols])
+}
+
+char_to_factor(data)
+
+#define learners
+if(length(nodes$W)>0){
+  qlib <- make_learner_stack("Lrnr_mean",
+                             "Lrnr_glm_fast",
+                             "Lrnr_glmnet",
+                             list("Lrnr_xgboost", nthread=1))
+
+  mn_metalearner <- make_learner(Lrnr_solnp, loss_function = loss_loglik_multinomial, learner_function = metalearner_linear_multinomial)
+  metalearner <- make_learner(Lrnr_nnls)
+  Q_learner <- make_learner(Lrnr_sl, qlib, metalearner)
+} else {
+  Q_learner <- make_learner(Lrnr_glm)
+}
+
+learner_list <- list(Y=Q_learner)
+```
+
+## Methods
+## Outcome Variable
+
+**Outcome Variable:** `r nodes$Y`
+
+## Predictor Variables
+
+**Adjustment Set:**
+
+```{r print_adjustment_set, results = "asis"}
+if(length(nodes$W)==0){
+  cat("unadjusted\n")
+} else {
+  for(covariate in nodes$W){
+    cat(sprintf("* %s\n",covariate))
+  }
+}
+```
+
+## Stratifying Variables
+
+The analysis was stratified on these variable(s):
+
+```{r print_strata_variables, results = "asis"}
+for(strata_variable in nodes$strata){
+  cat(sprintf("* %s\n",strata_variable))
+}
+
+strata <- collapse_strata(data, nodes)
+
+```
+
+## Data Summary
+```{r data_summary}
+obs_counts <- get_obs_counts(data, nodes)
+kable(obs_counts)
+
+if(params$output_directory!=""){
+  counts_file <- file.path(params$output_directory, "obs_counts.rdata")
+  
+  save(obs_counts, file=counts_file)
+}
+
+```
+
+
+The following strata were considered:
+
+```{r print_strata, results = "asis"}
+strata_levels <- sort(unique(strata$strata_label))
+for(stratum in strata_levels){
+  cat(sprintf("* %s\n",stratum))
+}
+```
+
+```{r drop_strata, results = "asis"}
+min_counts <- obs_counts[,list(min_cell=min(nY)),
+                         by=eval(nodes$strata)]
+
+#todo: this could be a script parameter
+cell_cutoff <- 5
+dropped_strata <- min_counts[min_cell < cell_cutoff]
+
+if(nrow(dropped_strata)>0){
+  cat("### Dropped Strata\n\nSome strata were dropped due to rare outcomes:\n\n")
+  # get strata labels for dropped_strata
+  dropped_labels <- strata[dropped_strata, strata_label, on=eval(nodes$strata)]
+  dropped_labels <- dropped_labels[!is.na(dropped_labels)]
+  
+  for(stratum in dropped_labels){
+    cat(sprintf("* %s\n",stratum))
+  }
+  
+  #actually drop these strata
+  data <- data[!(strata_label%in%dropped_labels)]
+  strata <- strata[!(strata_label%in%dropped_labels)]
+}
+
+if(nrow(data)==0){
+  cat("\n\nALL STRATA DROPPED. JOB FINISHED\n")
+  knit_exit()
+}
+```
+
+## Methods Detail
+
+We're interested in the unadjust means $E[Y]$ within strata of the stratifying variables. For simplicitly, we'll use TMLE to get normal approximation standard errors that account for the clustering design specified by the id variable.
+
+todo: add detail about dropping strata with rare outcomes, handling missingness
+
+
+```{r stratified_tmle, message=FALSE}
+results <- stratified_tmle(data, nodes, learner_list, strata)
+formatted_results <- format_results(results, data, nodes)
+```
+
+```{r save_results}
+if(params$output_directory!=""){
+  results_file <- file.path(params$output_directory, "results.rdata")
+  
+  save(formatted_results, file=results_file)
+}
+```
+
+
+# Results Detail
+
+## Results Plots
+```{r plot_mean}
+mean_plot(formatted_results)
+```
+
+## Results Table
+```{r results_tables, results="asis"}
+parameter_types <- unique(formatted_results$type)
+for(parameter_type in parameter_types){
+  cat(sprintf("\n\n### Parameter: %s\n", parameter_type))
+  print_cols <- c(nodes$strata,  
+                  "estimate", "ci_lower", "ci_upper")
+  subset <- formatted_results[type==parameter_type, print_cols, with=FALSE]
+  
+  k <- kable(subset)
+  print(k)
+}
+```
+
